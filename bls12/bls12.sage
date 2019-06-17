@@ -29,7 +29,7 @@ def run():
     h = int(n/r)
     #print('prime q: %d' % q)
 
-    for b in range(10**7):
+    for b in range(1, 10**7):
       try:
         F = GF(q)
         E = EllipticCurve(F, [0, b])
@@ -41,6 +41,7 @@ def run():
           return
       except Exception as e:
         print(e)
+        break
 
 def generate_curve(E, b, h, r, x, q, F):
   # common towers from: https://eprint.iacr.org/2012/072.pdf
