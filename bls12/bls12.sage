@@ -1,4 +1,5 @@
 import sys
+import json
 
 search_type = sys.argv[1]
 if search_type == 'initial':
@@ -9,6 +10,10 @@ elif search_type == 'bitsize':
   initial_x = randrange(2**x_bitsize, 2**(x_bitsize+1))
 else:
   raise Exception('unknown command')
+
+out_file = None
+if len(sys.argv) > 3:
+  out_file = sys.argv[3]
 
 def run():
   R = ZZ['x']
@@ -36,7 +41,33 @@ def run():
         if E.order() == n:
           print('found b: %d' % b)
           print('(x, t, q, r, n): (%d, %d, %d, %d, %d)' % (x, t, q, r, n))
-          ds, R, t, F2, u, E2, RR, tt, F12, w, E12 = generate_curve(E, b, h, r, x, q, F)
+          ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator = generate_curve(E, b, h, r, x, q, F)
+          quadratic_non_residue_coefficients = F2.vector_space()(quadratic_non_residue)
+          g2_generator_x_coefficients = F2.vector_space()(g2_generator[0])
+          g2_generator_y_coefficients = F2.vector_space()(g2_generator[1])
+          curve_desc = {
+            'x': hex(int(x)),
+            't': hex(int(t)),
+            'q': hex(int(q)),
+            'r': hex(int(r)),
+            'n': hex(int(n)),
+            'non_residue': hex(int(non_residue)),
+            'quadratic_non_residue_0': hex(int(quadratic_non_residue_coefficients[0])),
+            'quadratic_non_residue_1': hex(int(quadratic_non_residue_coefficients[1])),
+            'is_D_type': str(is_D_type),
+            'g1_x': hex(int(g1_generator[0])),
+            'g1_y': hex(int(g1_generator[1])),
+            'g2_x_0': hex(int(g2_generator_x_coefficients[0])),
+            'g2_x_1': hex(int(g2_generator_x_coefficients[1])),
+            'g2_y_0': hex(int(g2_generator_y_coefficients[0])),
+            'g2_y_1': hex(int(g2_generator_y_coefficients[1]))
+          }
+          print('----------------------')
+          print(curve_desc)
+          if out_file is not None:
+            f = open(out_file, 'w')
+            f.write(json.dumps(curve_desc))
+            f.close()
           #do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, tt, F12, w, E12)
           return
       except Exception as e:
@@ -45,26 +76,26 @@ def run():
 
 def generate_curve(E, b, h, r, x, q, F):
   # common towers from: https://eprint.iacr.org/2012/072.pdf
-  R.<t> = PolynomialRing(F)
+  R.<T> = PolynomialRing(F)
   non_residue = None
   quadratic_non_residue = None
   if not F(-1).is_square():
     non_residue = -1
-    F2.<u> = F.extension(t^2-non_residue,'u')
+    F2.<u> = F.extension(T^2-non_residue,'u')
     for j in range(1,4):
       if not (u+j).is_square():
         quadratic_non_residue = u+j
         break
   elif not F(-2).is_square():
     non_residue = -2
-    F2.<u> = F.extension(t^2-non_residue,'u')
+    F2.<u> = F.extension(T^2-non_residue,'u')
     if not u.is_square():
       quadratic_non_residue = u
     elif not (u+2).is_square():
       quadratic_non_residue = u+2
   elif not F(-5).is_square():
     non_residue = -5
-    F2.<u> = F.extension(t^2-non_residue,'u')
+    F2.<u> = F.extension(T^2-non_residue,'u')
     if not u.is_square():
       quadratic_non_residue = u
   if quadratic_non_residue is None:
@@ -76,19 +107,21 @@ def generate_curve(E, b, h, r, x, q, F):
   E2 = EllipticCurve(F2, [0,b*quadratic_non_residue])
   is_D_type = False
   if not (E2.order()/r).is_integer():
-    print('D type twist')
     is_D_type = true
     E2 = EllipticCurve(F2, [0,b/quadratic_non_residue])
     if not (E2.order()/r).is_integer():
       raise Exception('no twist had appropriate order')
+    else:
+      print('D type twist')
 
   else:
     print('M type twist')
 
-  RR.<tt> = PolynomialRing(F2)
-  F12.<w> = F2.extension(tt^6 - quadratic_non_residue)
+  RR.<TT> = PolynomialRing(F2)
+  F12.<w> = F2.extension(TT^6 - quadratic_non_residue)
   E12 = EllipticCurve(F12, [0,b])
 
+  g1_generator = None
   for j in range(10**3):
     attempted_x = F(j)
     y2 = attempted_x**3 + F(b)
@@ -97,10 +130,11 @@ def generate_curve(E, b, h, r, x, q, F):
     y = y2.sqrt()
     p = h*E(attempted_x, y)
     if not p.is_zero() and (r*p).is_zero():
+      g1_generator = p
       print('found generator for G1: %s' % p)
       break
 
-  print(E2.order()/r)
+  g2_generator = None
   h2 = int(E2.order()/r)
   for j in range(10**3):
     attempted_x = F2(j)
@@ -115,10 +149,11 @@ def generate_curve(E, b, h, r, x, q, F):
     y = y2.sqrt()
     p = h2*E2(attempted_x, y)
     if not p.is_zero() and (r*p).is_zero():
+      g2_generator = p
       print('found generator for G2: %s' % p)
       break
 
-  return ds, R, t, F2, u, E2, RR, tt, F12, w, E12
+  return ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator
 
 def do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, tt, F12, w, E12):
   # only works for bls12-381
