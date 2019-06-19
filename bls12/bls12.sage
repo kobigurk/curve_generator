@@ -7,7 +7,8 @@ if search_type == 'initial':
 elif search_type == 'bitsize':
   bitsize = Integer(int(sys.argv[2]))
   x_bitsize = int(bitsize/6)
-  initial_x = randrange(2**x_bitsize, 2**(x_bitsize+1))
+  initial_x = (2*randrange(0, 2) - 1)*randrange(2**x_bitsize, 2**(x_bitsize+1))
+  print('bit size is %d' % bitsize)
 else:
   raise Exception('unknown command')
 
@@ -41,26 +42,34 @@ def run():
         if E.order() == n:
           print('found b: %d' % b)
           print('(x, t, q, r, n): (%d, %d, %d, %d, %d)' % (x, t, q, r, n))
-          ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator = generate_curve(E, b, h, r, x, q, F)
+          ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, cofactor_g1, cofactor_g2 = generate_curve(E, b, h, r, x, q, F)
           quadratic_non_residue_coefficients = F2.vector_space()(quadratic_non_residue)
           g2_generator_x_coefficients = F2.vector_space()(g2_generator[0])
           g2_generator_y_coefficients = F2.vector_space()(g2_generator[1])
+          g1_test_vectors = generate_scalar_mult_test_vectors_g1(g1_generator, r, 10)
+          g2_test_vectors = generate_scalar_mult_test_vectors_g2(g2_generator, F2, r, 10)
           curve_desc = {
-            'x': hex(int(x)),
-            't': hex(int(t)),
-            'q': hex(int(q)),
-            'r': hex(int(r)),
-            'n': hex(int(n)),
-            'non_residue': hex(int(non_residue)),
-            'quadratic_non_residue_0': hex(int(quadratic_non_residue_coefficients[0])),
-            'quadratic_non_residue_1': hex(int(quadratic_non_residue_coefficients[1])),
+            'A': '0',
+            'B': num_to_hex(b),
+            'x': num_to_hex(x),
+            't': num_to_hex(t),
+            'q': num_to_hex(q),
+            'r': num_to_hex(r),
+            'n': num_to_hex(n),
+            'non_residue': num_to_hex(non_residue),
+            'quadratic_non_residue_0': num_to_hex(quadratic_non_residue_coefficients[0]),
+            'quadratic_non_residue_1': num_to_hex(quadratic_non_residue_coefficients[1]),
             'is_D_type': str(is_D_type),
-            'g1_x': hex(int(g1_generator[0])),
-            'g1_y': hex(int(g1_generator[1])),
-            'g2_x_0': hex(int(g2_generator_x_coefficients[0])),
-            'g2_x_1': hex(int(g2_generator_x_coefficients[1])),
-            'g2_y_0': hex(int(g2_generator_y_coefficients[0])),
-            'g2_y_1': hex(int(g2_generator_y_coefficients[1]))
+            'g1_x': num_to_hex(g1_generator[0]),
+            'g1_y': num_to_hex(g1_generator[1]),
+            'g2_x_0': num_to_hex(g2_generator_x_coefficients[0]),
+            'g2_x_1': num_to_hex(g2_generator_x_coefficients[1]),
+            'g2_y_0': num_to_hex(g2_generator_y_coefficients[0]),
+            'g2_y_1': num_to_hex(g2_generator_y_coefficients[1]),
+            'cofactor_g1': num_to_hex(cofactor_g1),
+            'cofactor_g2': num_to_hex(cofactor_g2),
+            'g1_scalar_mult_test_vectors': g1_test_vectors,
+            'g2_scalar_mult_test_vectors': g2_test_vectors
           }
           print('----------------------')
           print(curve_desc)
@@ -153,7 +162,7 @@ def generate_curve(E, b, h, r, x, q, F):
       print('found generator for G2: %s' % p)
       break
 
-  return ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator
+  return ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, E.order()/r, E2.order()/r
 
 def do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, tt, F12, w, E12):
   # only works for bls12-381
@@ -167,6 +176,50 @@ def twist(P, w, E12):
 
 def untwist(P, w, E2):
     return E2((P[0]*w^2)[0], (P[1]*w^3)[0])
+
+def generate_scalar_mult_test_vectors_g1(generator, r, amount):
+  test_vectors = []
+  for i in range(amount):
+    b = randrange(0, r)
+    a = randrange(0, r)
+    p1 = b*generator
+    p2 = a*p1
+
+    test_vectors.append({
+      'g_x': num_to_hex(p1[0]),
+      'g_y': num_to_hex(p1[1]),
+      'h_x': num_to_hex(p2[0]),
+      'h_y': num_to_hex(p2[1]),
+      'a': hex(a),
+    });
+
+  return test_vectors
+
+def generate_scalar_mult_test_vectors_g2(generator, F2, r, amount):
+  test_vectors = []
+  for i in range(amount):
+    b = randrange(0, r)
+    a = randrange(0, r)
+    p1 = b*generator
+    p2 = a*p1
+
+    p1_x_coefficients = F2.vector_space()(p1[0])
+    p1_y_coefficients = F2.vector_space()(p1[1])
+    p2_x_coefficients = F2.vector_space()(p2[0])
+    p2_y_coefficients = F2.vector_space()(p2[1])
+    test_vectors.append({
+      'g_x_0': num_to_hex(p1_x_coefficients[0]),
+      'g_x_1': num_to_hex(p1_x_coefficients[1]),
+      'g_y_0': num_to_hex(p1_y_coefficients[0]),
+      'g_y_1': num_to_hex(p1_y_coefficients[1]),
+      'h_x_0': num_to_hex(p2_x_coefficients[0]),
+      'h_x_1': num_to_hex(p2_x_coefficients[1]),
+      'h_y_0': num_to_hex(p2_y_coefficients[0]),
+      'h_y_1': num_to_hex(p2_y_coefficients[1]),
+      'a': hex(a),
+    });
+
+  return test_vectors
 
 def line_function(A, B, P):
     if A==B:
@@ -199,5 +252,11 @@ def miller_loop(P, Q, r, ds, w, E2, E12):
     f = f*line_function(T, T, P)
 
     return f
+
+def num_to_hex(num):
+  if num < 0:
+    return '-0x%x' % abs(int(num))
+  else:
+    return '0x%x' % abs(int(num))
 
 run()
