@@ -42,14 +42,22 @@ def run():
         if E.order() == n:
           print('found b: %d' % b)
           print('(x, t, q, r, n): (%d, %d, %d, %d, %d)' % (x, t, q, r, n))
-          ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, cofactor_g1, cofactor_g2 = generate_curve(E, b, h, r, x, q, F)
+          ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, cofactor_g1, cofactor_g2, A_twist, B_twist = generate_curve(E, b, h, r, x, q, F)
           quadratic_non_residue_coefficients = F2.vector_space()(quadratic_non_residue)
           g2_generator_x_coefficients = F2.vector_space()(g2_generator[0])
           g2_generator_y_coefficients = F2.vector_space()(g2_generator[1])
-          g1_test_vectors = generate_scalar_mult_test_vectors_g1(g1_generator, r, 10)
-          g2_test_vectors = generate_scalar_mult_test_vectors_g2(g2_generator, F2, r, 10)
+
+          num_test_vectors = 1
+          field_element_length = ceil(log(q)/log(2) * 1/8)
+          scalar_element_length = ceil(log(r)/log(2) * 1/8)
+          curve_parameters_hex = encode_curve_paramateres(field_element_length, q, 0, b, scalar_element_length, r)
+          g1_test_vectors, g1_test_vectors_gs, g1_test_vectors_scalars = generate_scalar_mult_test_vectors_g1(g1_generator, r, num_test_vectors, field_element_length, scalar_element_length, curve_parameters_hex)
+          g1_multiexp_test_vector = generate_multiexp_test_vector_g1(E, g1_test_vectors, g1_test_vectors_gs, g1_test_vectors_scalars, field_element_length, scalar_element_length, curve_parameters_hex)
+          g2_test_vectors = generate_scalar_mult_test_vectors_g2(g2_generator, F2, r, num_test_vectors)
+          A_twist_coefficients = F2.vector_space()(A_twist)
+          B_twist_coefficients = F2.vector_space()(B_twist)
           curve_desc = {
-            'A': '0',
+            'A': num_to_hex(0),
             'B': num_to_hex(b),
             'x': num_to_hex(x),
             't': num_to_hex(t),
@@ -69,7 +77,12 @@ def run():
             'cofactor_g1': num_to_hex(cofactor_g1),
             'cofactor_g2': num_to_hex(cofactor_g2),
             'g1_scalar_mult_test_vectors': g1_test_vectors,
-            'g2_scalar_mult_test_vectors': g2_test_vectors
+            'g2_scalar_mult_test_vectors': g2_test_vectors,
+            'A_twist_0': num_to_hex(A_twist_coefficients[0]),
+            'A_twist_1': num_to_hex(A_twist_coefficients[1]),
+            'B_twist_0': num_to_hex(B_twist_coefficients[0]),
+            'B_twist_1': num_to_hex(B_twist_coefficients[1]),
+            'g1_multiexp_test_vector': g1_multiexp_test_vector,
           }
           print('----------------------')
           print(curve_desc)
@@ -115,15 +128,18 @@ def generate_curve(E, b, h, r, x, q, F):
   ds = Integer(x).digits(2)
   E2 = EllipticCurve(F2, [0,b*quadratic_non_residue])
   is_D_type = False
+  A_twist = 0
   if not (E2.order()/r).is_integer():
     is_D_type = true
     E2 = EllipticCurve(F2, [0,b/quadratic_non_residue])
     if not (E2.order()/r).is_integer():
       raise Exception('no twist had appropriate order')
     else:
+      B_twist = b/quadratic_non_residue
       print('D type twist')
 
   else:
+    B_twist = b*quadratic_non_residue
     print('M type twist')
 
   RR.<TT> = PolynomialRing(F2)
@@ -162,7 +178,7 @@ def generate_curve(E, b, h, r, x, q, F):
       print('found generator for G2: %s' % p)
       break
 
-  return ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, E.order()/r, E2.order()/r
+  return ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, E.order()/r, E2.order()/r, A_twist, B_twist
 
 def do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, tt, F12, w, E12):
   # only works for bls12-381
@@ -177,23 +193,49 @@ def twist(P, w, E12):
 def untwist(P, w, E2):
     return E2((P[0]*w^2)[0], (P[1]*w^3)[0])
 
-def generate_scalar_mult_test_vectors_g1(generator, r, amount):
+def generate_multiexp_test_vector_g1(E, g1_test_vectors, gs, scalars, field_element_length, scalar_element_length, curve_parameters_hex):
+  p = E(0, 1, 0)
+  str = '03' + curve_parameters_hex
+  i = 0
+  for v in g1_test_vectors:
+    str += encode_num_to_length(int(v['g_x'], 16), field_element_length)
+    str += encode_num_to_length(int(v['g_y'], 16), field_element_length)
+    str += encode_num_to_length(int(v['a'], 16), scalar_element_length)
+    p += scalars[i]*gs[i]
+
+  return {
+    'binary': str,
+    'expected_x': num_to_hex(p[0]),
+    'expected_y': num_to_hex(p[1]),
+  }
+
+
+def generate_scalar_mult_test_vectors_g1(generator, r, amount, field_element_length, scalar_element_length, curve_parameters_hex):
   test_vectors = []
+  gs = []
+  scalars = []
   for i in range(amount):
     b = randrange(0, r)
     a = randrange(0, r)
     p1 = b*generator
     p2 = a*p1
+    p3 = p1 + p2
 
+    gs.append(p1)
+    scalars.append(a)
     test_vectors.append({
       'g_x': num_to_hex(p1[0]),
       'g_y': num_to_hex(p1[1]),
       'h_x': num_to_hex(p2[0]),
       'h_y': num_to_hex(p2[1]),
-      'a': hex(a),
+      'a': num_to_hex(a),
+      'scalar_mult_binary': '02' + curve_parameters_hex + encode_num_to_length(p1[0], field_element_length) + encode_num_to_length(p1[1], field_element_length) + encode_num_to_length(a, scalar_element_length),
+      'addition_binary': '01' + curve_parameters_hex + encode_num_to_length(p1[0], field_element_length) + encode_num_to_length(p1[1], field_element_length) + encode_num_to_length(p2[0], field_element_length) + encode_num_to_length(p2[1], field_element_length),
+      'gph_x': num_to_hex(p3[0]),
+      'gph_y': num_to_hex(p3[1]),
     });
 
-  return test_vectors
+  return test_vectors, gs, scalars
 
 def generate_scalar_mult_test_vectors_g2(generator, F2, r, amount):
   test_vectors = []
@@ -258,5 +300,19 @@ def num_to_hex(num):
     return '-0x%x' % abs(int(num))
   else:
     return '0x%x' % abs(int(num))
+
+def encode_num_to_length(num, length):
+  return ('%0' + str(2*length) + 'x') % int(num)
+
+def encode_curve_paramateres(field_element_length, q, a, b, scalar_element_length, scalar_field_size):
+  str = ''
+  str += '%x' % field_element_length
+  str += encode_num_to_length(q, field_element_length)
+  str += encode_num_to_length(a, field_element_length)
+  str += encode_num_to_length(b, field_element_length)
+  str += '%x' % scalar_element_length
+  str += encode_num_to_length(scalar_field_size, scalar_element_length)
+
+  return str
 
 run()
