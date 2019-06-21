@@ -1,6 +1,7 @@
 import sys
 import json
 import codecs
+from utils import encode_num_to_length
 
 call_hex = sys.argv[1]
 bytes = bytearray.fromhex(call_hex)
@@ -64,7 +65,9 @@ if operation >= 0x01 and operation <= 0x03:
     E = EllipticCurve(F, [F(A), F(B)])
     p1 = E(x1, y1)
     p2 = E(x2, y2)
-    print('result: %s' % (p1 + p2))
+    p3 = p1 + p2
+    print('result: %s' % p3)
+    print('result encoded: %s%s' % (encode_num_to_length(p3[0], field_element_length), encode_num_to_length(p3[1], field_element_length)))
 
   elif operation == 0x02:
     x = from_be(bytes[pos:pos+field_element_length])
@@ -79,7 +82,9 @@ if operation >= 0x01 and operation <= 0x03:
 
     F = GF(base_field)
     E = EllipticCurve(F, [F(A), F(B)])
-    print('result: %s' % s*E(x, y))
+    p3 = s*E(x, y)
+    print('result: %s' % p3)
+    print('result encoded: %s%s' % (encode_num_to_length(p3[0], field_element_length), encode_num_to_length(p3[1], field_element_length)))
 
   elif operation == 0x03:
     pairs = []
@@ -103,6 +108,7 @@ if operation >= 0x01 and operation <= 0x03:
       p += s*E(x,y)
 
     print('result: %s' % p)
+    print('result encoded: %s%s' % (encode_num_to_length(p[0], field_element_length), encode_num_to_length(p[1], field_element_length)))
 
 else:
   pass

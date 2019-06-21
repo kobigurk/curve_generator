@@ -1,5 +1,6 @@
 import sys
 import json
+from utils import encode_num_to_length
 
 search_type = sys.argv[1]
 if search_type == 'initial':
@@ -300,9 +301,6 @@ def num_to_hex(num):
     return '-0x%x' % abs(int(num))
   else:
     return '0x%x' % abs(int(num))
-
-def encode_num_to_length(num, length):
-  return ('%0' + str(2*length) + 'x') % int(num)
 
 def encode_curve_paramateres(field_element_length, q, a, b, scalar_element_length, scalar_field_size):
   str = ''
