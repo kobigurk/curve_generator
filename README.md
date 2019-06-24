@@ -6,7 +6,7 @@ Usage for bls12:
 
   ```
   cd bls12
-  sage bls12.sage initial_x 0x8508c00000000001
+  sage bls12.sage initial 0x8508c00000000001
   ```
 
   ```
