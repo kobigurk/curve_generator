@@ -43,7 +43,7 @@ def run():
         if E.order() == n:
           print('found b: %d' % b)
           print('(x, t, q, r, n): (%d, %d, %d, %d, %d)' % (x, t, q, r, n))
-          ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, cofactor_g1, cofactor_g2, A_twist, B_twist = generate_curve(E, b, h, r, x, q, F)
+          ds, R, T, F2, u, E2, RR, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, cofactor_g1, cofactor_g2, A_twist, B_twist, u_to_w = generate_curve(E, b, h, r, x, q, F)
           quadratic_non_residue_coefficients = F2.vector_space()(quadratic_non_residue)
           g2_generator_x_coefficients = F2.vector_space()(g2_generator[0])
           g2_generator_y_coefficients = F2.vector_space()(g2_generator[1])
@@ -91,7 +91,7 @@ def run():
             f = open(out_file, 'w')
             f.write(json.dumps(curve_desc))
             f.close()
-          #do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, tt, F12, w, E12)
+          do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, F12, w, E12, g1_generator, g2_generator, is_D_type, u_to_w)
           return
       except Exception as e:
         print(e)
@@ -102,30 +102,44 @@ def generate_curve(E, b, h, r, x, q, F):
   R.<T> = PolynomialRing(F)
   non_residue = None
   quadratic_non_residue = None
+  F12_equation = None
+  u_to_w = None
   if not F(-1).is_square():
     non_residue = -1
     F2.<u> = F.extension(T^2-non_residue,'u')
     for j in range(1,4):
       if not (u+j).is_square():
         quadratic_non_residue = u+j
+        F12_equation = (T^6 - j)^2 - non_residue
+        u_to_w = T^6 - j
         break
   elif not F(-2).is_square():
     non_residue = -2
     F2.<u> = F.extension(T^2-non_residue,'u')
     if not u.is_square():
       quadratic_non_residue = u
+      F12_equation = (T^6)^2 - non_residue
+      u_to_w = T^6
     elif not (u+2).is_square():
       quadratic_non_residue = u+2
+      F12_equation = (T^6 - 2)^2 - non_residue
+      u_to_w = T^6 - 2
   elif not F(-5).is_square():
     non_residue = -5
     F2.<u> = F.extension(T^2-non_residue,'u')
     if not u.is_square():
       quadratic_non_residue = u
+      F12_equation = (T^6)^2 - non_residue
+      u_to_w = T^6
   if quadratic_non_residue is None:
     raise Exception('can\'t find a quadratic non residue')
 
+  F12.<w> = F.extension(F12_equation)
+  print('F12 equation: %s' % F12_equation)
+  print('F12 equation is irreducible: %s' % F12_equation.is_irreducible())
   print('non_residue is %s' % non_residue)
   print('quadratic_non_residue is %s' % quadratic_non_residue)
+  #print(w^12 % (w^6 + 1))
   ds = Integer(x).digits(2)
   E2 = EllipticCurve(F2, [0,b*quadratic_non_residue])
   is_D_type = False
@@ -143,8 +157,6 @@ def generate_curve(E, b, h, r, x, q, F):
     B_twist = b*quadratic_non_residue
     print('M type twist')
 
-  RR.<TT> = PolynomialRing(F2)
-  F12.<w> = F2.extension(TT^6 - quadratic_non_residue)
   E12 = EllipticCurve(F12, [0,b])
 
   g1_generator = None
@@ -179,20 +191,28 @@ def generate_curve(E, b, h, r, x, q, F):
       print('found generator for G2: %s' % p)
       break
 
-  return ds, R, T, F2, u, E2, RR, TT, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, E.order()/r, E2.order()/r, A_twist, B_twist
+  return ds, R, T, F2, u, E2, RR, F12, w, E12, non_residue, quadratic_non_residue, is_D_type, g1_generator, g2_generator, E.order()/r, E2.order()/r, A_twist, B_twist, u_to_w
 
-def do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, tt, F12, w, E12):
-  # only works for bls12-381
-  #z = miller_loop(E12(3685416753713387016781088315183077757961620795782546409894578378688607592378376318836054947676345821548104185464507, 1339506544944476473020471379941921221584933875938349620426543736416511423956333506472724655353366534992391756441569), twist(E2(3059144344244213709971259814753781636986470325476647558659373206291635324768958432433509563104347017837885763365758*u+352701069587466618187139116011060144890029952792775240219908644239793785735715026873347600343865175952761926303160, 927553665492332455747201965776037880757740193453592970025027978793976877002675564980949289727957565575433344219582*u+1985150602287291935568054521177171638300868978215655730859378665066344726373823718423869104263333984641494340347905), w, E12), r, ds, w, E2, E12)
-  z = miller_loop(E12(3685416753713387016781088315183077757961620795782546409894578378688607592378376318836054947676345821548104185464507, 1339506544944476473020471379941921221584933875938349620426543736416511423956333506472724655353366534992391756441569), twist(E2(3059144344244213709971259814753781636986470325476647558659373206291635324768958432433509563104347017837885763365758*u+352701069587466618187139116011060144890029952792775240219908644239793785735715026873347600343865175952761926303160, 927553665492332455747201965776037880757740193453592970025027978793976877002675564980949289727957565575433344219582*u+1985150602287291935568054521177171638300868978215655730859378665066344726373823718423869104263333984641494340347905), w, E12), r, ds, w, E2, E12)
-  print(z)
-  print(z^(int((q^12 - 1)/r)))
+def do_pairing(r, x, q, F, ds, R, t, F2, u, E2, RR, F12, w, E12, g1_generator, g2_generator, is_D_type, u_to_w):
+  # only works for bls12-377
+  #z = miller_loop(E12(81937999373150964239938255573465948239988671502647976594219695644855304257327692006745978603320413799295628339695, 241266749859715473739788878240585681733927191168601896383759122102112907357779751001206799952863815012735208165030), twist(E2(0xea6040e700403170dc5a51b1b140d5532777ee6651cecbe7223ece0799c9de5cf89984bff76fe6b26bfefa6ea16afe*u+0x18480be71c785fec89630a2a3841d01c565f071203e50317ea501f557db6b9b71889f52bb53540274e3e48f7c005196, 0xf8169fd28355189e549da3151a70aa61ef11ac3d591bf12463b01acee304c24279b83f5e52270bd9a1cdd185eb8f93*u+0x690d665d446f7bd960736bcbb2efb4de03ed7274b49a58e458c282f832d204f2cf88886d8c7c2ef094094409fd4ddf), u, w, F2, F12, E2, E12), r, ds, u, w, F2, F12, E2, E12)
+  z = miller_loop(E12(g1_generator[0], g1_generator[1]), twist(g2_generator, u, w, F2, F12, E2, E12, is_D_type, u_to_w), r, ds, u, w, F2, F12, E2, E12)
+  z2 = miller_loop(E12(g1_generator[0], -g1_generator[1]), twist(g2_generator, u, w, F2, F12, E2, E12, is_D_type, u_to_w), r, ds, u, w, F2, F12, E2, E12)
+  z_coeffs = F12.vector_space()(z)
+  #print('%s + (%s)*u' % (z_coeffs[0] + z_coeffs[1]*w + z_coeffs[2]*w^2 + z_coeffs[3]*w^3 + z_coeffs[4]*w^4 + z_coeffs[5]*w^5, z_coeffs[6] + z_coeffs[7]*w + z_coeffs[8]*w^2 + z_coeffs[9]*w^3 + z_coeffs[10]*w^4 + z_coeffs[11]*w^5))
+  print('pairing result: %s' % ((z*z2)^(int((q^12 - 1)/r))))
 
-def twist(P, w, E12):
-    return E12(P[0]/w^2, P[1]/w^3)
+def twist(P, u, w, F2, F12, E2, E12, is_D_type, u_to_w):
+    x_coeffs = F2.vector_space()(P[0])
+    x_multiplier = w^2 if is_D_type else 1/w^2
+    y_coeffs = F2.vector_space()(P[1])
+    y_multiplier = w^3 if is_D_type else 1/w^3
+    return E12((x_coeffs[0] + x_coeffs[1]*u_to_w(w))*x_multiplier, (y_coeffs[0] + y_coeffs[1]*u_to_w(w))*y_multiplier)
 
-def untwist(P, w, E2):
-    return E2((P[0]*w^2)[0], (P[1]*w^3)[0])
+def untwist(P, u, w, F2, F12, E2, E12, is_D_type):
+    x_coeffs = F12.vector_space()(P[0]/w^2)
+    y_coeffs = F12.vector_space()(P[1]/w^3)
+    return E2(x_coeffs[0] + x_coeffs[6]*u, y_coeffs[0] + y_coeffs[6]*u)
 
 def generate_multiexp_test_vector_g1(E, g1_test_vectors, gs, scalars, field_element_length, scalar_element_length, curve_parameters_hex):
   p = E(0, 1, 0)
@@ -274,22 +294,23 @@ def line_function(A, B, P):
     return l*(P[0]-A[0]) + A[1] - P[1]
 
 
-def miller_loop(P, Q, r, ds, w, E2, E12):
+def miller_loop(P, Q, r, ds, u, w, F2, F12, E2, E12):
+    #print('in miller loop')
     f = 1
     T = -Q
     L = len(ds)
     for i in range(L-2, 0, -1):
-        print('%d: 1' % i)
+        #print('%d: 1' % i)
         f = f*line_function(T, T, P)
-        print('%d: 2' % i)
-        T = twist(2*untwist(T, w, E2), w, E12)
-        print('%d: 3' % i)
+        #print('%d: 2' % i)
+        T = 2*T
+        #print('%d: 3' % i)
         if ds[i] == -1:
-            print('%d: 4' % i)
+            #print('%d: 4' % i)
             f = f * line_function(T, -Q, P)
-            print('%d: 5' % i)
-            T = twist(untwist(T, w, E2) - untwist(Q, w, E2), w, E12)
-            print('%d: 6' % i)
+            #print('%d: 5' % i)
+            T = T - Q
+            #print('%d: 6' % i)
         f = f^2
 
     f = f*line_function(T, T, P)
