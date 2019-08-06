@@ -109,6 +109,33 @@ if operation >= 0x01 and operation <= 0x03:
 
     print('result: %s' % p)
     print('result encoded: %s%s' % (encode_num_to_length(p[0], field_element_length), encode_num_to_length(p[1], field_element_length)))
+elif operation == 0x4:
+		field_element_length = bytes[pos:pos+1][0]
+		pos += 1
+
+		print('field element length: %d' % field_element_length)
+
+		base_field = from_be(bytes[pos:pos+field_element_length])
+		print('base field: %d' % base_field)
+		pos += field_element_length
+
+		A = from_be(bytes[pos:pos+field_element_length])
+		print('A: %d' % A)
+		pos += field_element_length
+
+		B = from_be(bytes[pos:pos+field_element_length])
+		print('B: %d' % B)
+		pos += field_element_length
+
+		scalar_element_length = bytes[pos:pos+1][0]
+		pos += 1
+
+		scalar_field_size = from_be(bytes[pos:pos+scalar_element_length])
+		print('scalar field size: %d' % scalar_field_size)
+		pos += scalar_element_length
+
+		family = bytes[pos:pos+1][0]
+		pos += 1
 
 else:
   pass
