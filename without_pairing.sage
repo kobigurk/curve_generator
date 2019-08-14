@@ -42,6 +42,12 @@ def run():
     if not is_prime(q):
       continue
     h = int(n/r)
+    if curve == 'bn':
+      if h != 1:
+        continue
+      if not is_prime(r):
+        continue
+
     #print('prime q: %d' % q)
 
     for b in range(1, 10**7):
